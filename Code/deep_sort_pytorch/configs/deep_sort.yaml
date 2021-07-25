@@ -1,0 +1,11 @@
+DEEPSORT:
+  REID_CKPT: "weights/ckpt.t7"
+  # REID_CKPT: "deep_sort_pytorch/deep_sort/deep/checkpoint/ckpt.t7"
+  MAX_DIST: 0.2
+  MIN_CONFIDENCE: 0.4
+  NMS_MAX_OVERLAP: 0.5
+  MAX_IOU_DISTANCE: 0.7
+  MAX_AGE: 30
+  N_INIT: 3
+  N_classes: 4
+  NN_BUDGET: 100

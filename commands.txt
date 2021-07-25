@@ -1,0 +1,19 @@
+
+### Mandatory Step for running code ###
+conda activate yolov5 
+D:
+cd Garvit_yolov5
+
+### For getting prediction on video ###
+
+Command:    python Code/main.py --path_to_video <path to video present in input folder>
+Example:    python Code/main.py --path_to_video Input/DJI_0004_gt.mp4
+Example:    python Code/main.py --path_to_video Input/5.mp4
+
+
+### For running tracking evaluation ###
+
+Command:   python Code/tracking_eval/tracking_eval.py --path_to_yolo_id <path where ground truth text id are present> --video_name <name of the video>
+Example:   python Code/tracking_eval/tracking_eval.py --path_to_yolo_id Input/Tracking_evaluation_images/yolo+id --video_name DJI_0004_gt
+
+

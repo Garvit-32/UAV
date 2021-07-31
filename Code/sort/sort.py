@@ -16,20 +16,20 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
 from __future__ import print_function
+from filterpy.kalman import KalmanFilter
+import argparse
+import time
+import glob
+from skimage import io
+import matplotlib.patches as patches
+import matplotlib.pyplot as plt
 
 import os
 import numpy as np
 import matplotlib
 
-matplotlib.use("TkAgg")
-import matplotlib.pyplot as plt
-import matplotlib.patches as patches
-from skimage import io
+# matplotlib.use("TkAgg")
 
-import glob
-import time
-import argparse
-from filterpy.kalman import KalmanFilter
 
 np.random.seed(0)
 
@@ -62,7 +62,8 @@ def iou_batch(bb_test, bb_gt):
     h = np.maximum(0.0, yy2 - yy1)
     wh = w * h
     o = wh / (
-        (bb_test[..., 2] - bb_test[..., 0]) * (bb_test[..., 3] - bb_test[..., 1])
+        (bb_test[..., 2] - bb_test[..., 0]) *
+        (bb_test[..., 3] - bb_test[..., 1])
         + (bb_gt[..., 2] - bb_gt[..., 0]) * (bb_gt[..., 3] - bb_gt[..., 1])
         - wh
     )
@@ -356,19 +357,21 @@ if __name__ == "__main__":
             iou_threshold=args.iou_threshold,
         )  # create instance of the SORT tracker
         seq_dets = np.loadtxt(seq_dets_fn, delimiter=",")
-        seq = seq_dets_fn[pattern.find("*") :].split(os.path.sep)[0]
+        seq = seq_dets_fn[pattern.find("*"):].split(os.path.sep)[0]
 
         with open(os.path.join("output", "%s.txt" % (seq)), "w") as out_file:
             print("Processing %s." % (seq))
             for frame in range(int(seq_dets[:, 0].max())):
                 frame += 1  # detection and frame numbers begin at 1
                 dets = seq_dets[seq_dets[:, 0] == frame, 2:7]
-                dets[:, 2:4] += dets[:, 0:2]  # convert to [x1,y1,w,h] to [x1,y1,x2,y2]
+                # convert to [x1,y1,w,h] to [x1,y1,x2,y2]
+                dets[:, 2:4] += dets[:, 0:2]
                 total_frames += 1
 
                 if display:
                     fn = os.path.join(
-                        "mot_benchmark", phase, seq, "img1", "%06d.jpg" % (frame)
+                        "mot_benchmark", phase, seq, "img1", "%06d.jpg" % (
+                            frame)
                     )
                     im = io.imread(fn)
                     ax1.imshow(im)

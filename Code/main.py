@@ -1,49 +1,33 @@
-from tqdm import tqdm
-from enum import unique
 
 import os
 import cv2
 import gc
+import torch
 import argparse
 import numpy as np
-import torch
-from PIL import Image
+from tqdm import tqdm
 import scipy.spatial.distance as dist
 from models.experimental import attempt_load
-from utils.datasets import LoadStreams, LoadImages, letterbox
-from utils.general import (
-    check_img_size,
-    check_requirements,
-    check_imshow,
-    non_max_suppression,
-    apply_classifier,
-    scale_coords,
-    xyxy2xywh,
-    strip_optimizer,
-    set_logging,
-    increment_path,
-    save_one_box,
-)
+from utils.datasets import letterbox
+from utils.general import non_max_suppression, scale_coords
+
 from math import cos, asin, sqrt, pi
-from movestar.python.movestar import movestar
-import pandas as pd
 import csv
-from utils.plots import colors, plot_one_box
-from utils.torch_utils import select_device, load_classifier, time_synchronized
 from sort.sort import *
 from deep_sort_pytorch.utils.parser import get_config
 from deep_sort_pytorch.deep_sort import DeepSort
-
-import matplotlib.pyplot as plt
 import matplotlib
+
 
 import warnings
 warnings.filterwarnings('ignore')
 
 matplotlib.use("TkAgg")
 
+global fps
 colors = {0: (0, 0, 255), 1: (0, 255, 0), 2: (255, 0, 0), 3: (255, 255, 0)}
 decoder = {0: "car", 1: "truck", 2: "bus", 3: "heavy_truck"}
+palette = (2 ** 11 - 1, 2 ** 15 - 1, 2 ** 20 - 1)
 
 
 def detect_object_yolov5(model, image, count):
@@ -112,7 +96,6 @@ class count_object(object):
         self.disappear_count = disappear_count
         self.track_id_centroid = {}
         self.class_count = {class_id: 0 for class_id in range(n_classes)}
-        # self.counted_track_ids = {}
         self.image_size = image_size
 
         self.corner_strips = [
@@ -335,26 +318,12 @@ def bbox_rel(xyxy):
     return x_c, y_c, w, h
 
 
-palette = (2 ** 11 - 1, 2 ** 15 - 1, 2 ** 20 - 1)
-
-
 def compute_color_for_labels(label):
     """
     Simple function that adds fixed color depending on the class
     """
     color = [int((p * (label ** 2 - label + 1)) % 255) for p in palette]
     return tuple(color)
-
-
-def write_tracking_txt(txt_file, trackers, frame_idx):
-
-    for i in trackers:
-        txt_file.write(
-            "{} {} {} {} {} {} {} {}\n".format(
-                frame_idx, i[4], i[6], i[0], i[1], i[2], i[3], i[5]
-            )
-        )
-    return txt_file
 
 
 def write_tracking_csv(counted_objects, decoder, shape):
@@ -409,88 +378,6 @@ def localize(
     )
 
 
-def write_rate_csv(args, rate_list, flag=1):
-    with open('Output/' + args.path_to_video.split("/")[-1][:-4] + "_deep_sort_rate_per_frame" + ".csv", "a") as csvfile:
-        # creating a csv writer object
-        csvwriter = csv.writer(csvfile)
-
-        # writing the fields
-        if flag == 0:
-            csvwriter.writerow(
-                [
-                    "frame id",
-                    "tracking id main",
-                    "tracking id class wise",
-                    "centroid x",
-                    "centroid y",
-                    "localized centroid x",
-                    "localized centroid y",
-                    "category",
-                    "speed",
-                    "acceleration",
-                    "distance covered",
-                    "average speed",
-                    "average acceleration",
-                    "total distance",
-                    "CO(g/m)",
-                    "HC(g)",
-                    "NOx(g)",
-                    "PM2.5_Ele(g)",
-                    "PM2.5_Org(g)",
-                    "Energy(KJ)",
-                    "CO2(g)",
-                    "Fuel(g)",
-                    "TT(s)",
-                ]
-            )
-        else:
-            # writing the data rows
-            csvwriter.writerows(rate_list)
-
-        # csvfile.close()
-
-
-def write_factor_csv(args, factor_list, flag=1):
-    with open('Output/' + args.path_to_video.split("/")[-1][:-4] + "_deep_sort_factor_per_frame" + ".csv", "a") as csvfile:
-        # creating a csv writer object
-        csvwriter = csv.writer(csvfile)
-
-        # writing the fields
-        if flag == 0:
-            csvwriter.writerow(
-                [
-                    "frame id",
-                    "tracking id main",
-                    "tracking id class wise",
-                    "centroid x",
-                    "centroid y",
-                    "localized centroid x",
-                    "localized centroid y",
-                    "category",
-                    "speed",
-                    "acceleration",
-                    "distance covered",
-                    "average speed",
-                    "average acceleration",
-                    "total distance covered",
-                    "CO(g/mi)",
-                    "HC(g/mi)",
-                    "NOx(g/mi)",
-                    "PM2.5_Ele(g/mi)",
-                    "PM2.5_Org(g/mi)",
-                    "Energy(KJ/mi)",
-                    "CO2(g/mi)",
-                    "Fuel(g/mi)",
-                    "TD(mi)",
-                ]
-            )
-        else:
-            # writing the data rows
-            csvwriter.writerows(factor_list)
-
-        # csvfile.close()
-
-
 def write_csv_tracking(args, csv_file_list_full1, flag=1):
     with open(
         'Output/' +
@@ -510,25 +397,10 @@ def write_csv_tracking(args, csv_file_list_full1, flag=1):
         else:
             csvwriter.writerows(csv_file_list_full1)
 
-        # csvfile.close()
-
-# output txt format:
-# <frame idx> <target id> <target id updated> centroid_x centroid_y localized_centroid_x localized_centroid_y <category>
-
 
 def remove(video_name):
-    if os.path.exists(os.path.join("Output", video_name + "_deep_sort_rate_per_frame.csv")):
-        os.remove(os.path.join("Output", video_name +
-                  "_deep_sort_rate_per_frame.csv"))
-    if os.path.exists(os.path.join("Output", video_name + "_deep_sort_rate_per_sec.csv")):
-        os.remove(os.path.join("Output", video_name +
-                  "_deep_sort_rate_per_sec.csv"))
-    if os.path.exists(os.path.join("Output", video_name + "_deep_sort_factor_per_frame.csv")):
-        os.remove(os.path.join("Output", video_name +
-                  "_deep_sort_factor_per_frame.csv"))
-    if os.path.exists(os.path.join("Output", video_name + "_deep_sort_factor_per_sec.csv")):
-        os.remove(os.path.join("Output", video_name +
-                  "_deep_sort_factor_per_sec.csv"))
+    if os.path.exists(os.path.join("Output", video_name + "_deep_sort_tracking.csv")):
+        os.remove(os.path.join("Output", video_name + "_deep_sort_tracking.csv"))
     if os.path.exists(os.path.join('Output', video_name + "_deep_sort.avi")):
         os.remove(os.path.join('Output', video_name + "_deep_sort.avi"))
 
@@ -536,46 +408,29 @@ def remove(video_name):
 def main():
     ap = argparse.ArgumentParser()
 
-    ap.add_argument(
-        "-p",
-        "--path_to_video",
-        # required=True,
-        # default='/home/hack/dl_ws/freelancing/UAV_code/DJI_0004_gt.mp4',
-        help="path to Caffe 'deploy' prototxt file",
-    )
-    ap.add_argument(
-        "--debug",
-        action="store_false",
-        help="",
-    )
-    ap.add_argument(
-        "--no-txt",
-        action="store_false",
-        help="",
-    )
+    ap.add_argument("-p", "--path_to_video", required=True,
+                    help="path to Video File", )
+    ap.add_argument("--debug", action="store_false",
+                    help="Argument to debug the code",)
+    ap.add_argument("--corner_percent", action="store_false",
+                    default=10, type=int)
+
     args = ap.parse_args()
 
-    yolo = (
-        attempt_load(
-            "weights/best.pt", map_location="cuda")
-        .eval()
-        .cuda()
-    )
+    yolo = attempt_load("weights/best.pt", map_location="cuda").eval().cuda()
 
     remove(args.path_to_video.split("/")[-1][:-4])
 
     flag = 0
-    count1 = 0
+    count = 0
     current_video = cv2.VideoCapture(args.path_to_video)
     width = current_video.get(cv2.CAP_PROP_FRAME_WIDTH)
     height = current_video.get(cv2.CAP_PROP_FRAME_HEIGHT)
     shape = (int(width), int(height))
-    global fps
     fps = round(current_video.get(cv2.CAP_PROP_FPS))
     length = int(current_video.get(cv2.CAP_PROP_FRAME_COUNT))
     decoder = {0: "car", 1: "truck", 2: "bus", 3: "heavy_truck"}
-    decoder_move = {"car": 1, "truck": 1, "bus": 2, "heavy_truck": 2}
-    corner_percent = 10
+    corner_percent = args.corner_percent
     out_video = cv2.VideoWriter(
         os.path.join('Output', args.path_to_video.split(
             "/")[-1][:-4] + "_deep_sort" + ".avi"),
@@ -587,9 +442,6 @@ def main():
     csv_file_list_full1 = []
 
     write_csv_tracking(args, [], 0)
-    write_factor_csv(args, [], 0)
-    write_rate_csv(args, [], 0)
-
     # flush_count = 0
     flush_count_thresh = 50
     for idx, frame in tqdm(enumerate(frame_extract(args.path_to_video)), total=length):
@@ -618,7 +470,7 @@ def main():
             )
             flag = 1
 
-        bboxes, count1 = detect_object_yolov5(yolo, frame[:, :, ::-1], count1)
+        bboxes, count = detect_object_yolov5(yolo, frame[:, :, ::-1], count)
 
         if len(bboxes):
             xyxys = bboxes[:, :4]  # scaled with coordinates
@@ -651,25 +503,9 @@ def main():
                 # )
 
                 if (idx+1) % 50 == 0:
-                    rate_list, factor_list = [], []
-                    for i in main_list:
-                        id_out = movestar(decoder_move[i[7]], [i[8]])
-                        rate_list.append(i + id_out["Emission Rate"][0])
-                        factor_list.append(i + id_out["Emission Factor"][0])
-                    write_rate_csv(args, rate_list)
-                    write_factor_csv(args, factor_list)
                     main_list = []
                 main_list += write_tracking_csv(
                     current_counted_object, decoder=decoder, shape=shape[::-1])
-
-                # main_list = write_tracking_csv(
-                #     current_counted_object, decoder=decoder, shape=shape[::-1])
-                # for i in main_list:
-                #     id_out = movestar(decoder_move[i[7]], [i[8]])
-                #     rate_list = i + id_out["Emission Rate"][0]
-                #     factor_list = i + id_out["Emission Factor"][0]
-                # write_rate_csv(args, rate_list)
-                # write_factor_csv(args, factor_list)
 
         else:
             deepsort.increment_ages()
@@ -746,15 +582,6 @@ def main():
                     write_csv_tracking(args, trackers_list)
                     trackers_list = []
 
-                # csv_file_list_full1.append(
-                #     [idx, int(i[6]), i[5], int(i[0]), int(
-                #         i[1]), int(i[2]), int(i[3])]
-                # )
-                # list1 = [idx, int(i[6]), i[5], int(i[0]), int(
-                #     i[1]), int(i[2]), int(i[3])]
-
-                # write_csv_tracking(args, list1)
-
                 color = colors[i[5]]
                 cv2.rectangle(
                     frame,
@@ -774,116 +601,6 @@ def main():
                     2,
                 )
             out_video.write(frame)
-
-    decoder = {"car": 1, "truck": 1, "bus": 2, "heavy_truck": 2}
-
-    # rate_list = []
-    # factor_list = []
-    # for i in csv_file_list_full:
-    #     id_out = movestar(decoder[i[7]], [i[8]])
-    #     rate_list.append(list(i) + id_out["Emission Rate"][0])
-    #     factor_list.append(list(i) + id_out["Emission Factor"][0])
-
-    df = pd.read_csv('Output/' + args.path_to_video.split("/")
-                     [-1][:-4] + "_deep_sort_rate_per_frame" + ".csv")
-
-    decoder = {"car": 1, "truck": 1, "bus": 2, "heavy_truck": 2}
-    sec_list = [i for i in range(1, length+1) if i % fps == 0]
-    main_dict = {j: [] for j in sorted(df['tracking id main'].unique())}
-
-    for i in df.values:
-        main_dict[i[1]].append(i)
-
-    rate_list = []
-    factor_list = []
-    sec_back = 0
-    for sec in sec_list:
-        for i in main_dict.keys():
-            y = 0
-            speed_list = []
-            dist_list = []
-            for x, j in enumerate(main_dict[i]):
-                speed_list.append(j[8])
-                dist_list.append(j[10])
-                if sec_back < j[0] <= sec:
-                    y = x
-
-            if y != 0:
-                id_out = movestar(decoder[j[7]], speed_list[:y+1])
-                rate_list.append([sec_list.index(sec)+1] +
-                                 main_dict[i][y].tolist()[3:10] + [sum(dist_list[:y+1])] + main_dict[i][y].tolist()[11:14] + id_out['Emission Rate'][0])
-                factor_list.append([sec_list.index(sec)+1] +
-                                   main_dict[i][y].tolist()[3:10] + [sum(dist_list[:y+1])] + main_dict[i][y].tolist()[11:14] + id_out['Emission Factor'][0])
-        sec_back = sec
-
-    with open('Output/' + args.path_to_video.split("/")[-1][:-4] + "_deep_sort_rate_per_sec" + ".csv", "w") as csvfile:
-        csvwriter = csv.writer(csvfile)
-
-        csvwriter.writerow(
-            [
-                "sec",
-                # "frame id",
-                # "tracking id main",
-                # "tracking id class wise",
-                "centroid x",
-                "centroid y",
-                "localized centroid x",
-                "localized centroid y",
-                "category",
-                "speed",
-                "acceleration",
-                "distance covered",
-                "average speed",
-                "average acceleration",
-                "total distance",
-                "CO(g)",
-                "HC(g)",
-                "NOx(g)",
-                "PM2.5_Ele(g)",
-                "PM2.5_Org(g)",
-                "Energy(KJ)",
-                "CO2(g)",
-                "Fuel(g)",
-                "TT(s)",
-            ]
-        )
-
-        csvwriter.writerows(rate_list)
-
-    with open('Output/' + args.path_to_video.split("/")[-1][:-4] + "_deep_sort_factor_per_sec" + ".csv", "w") as csvfile:
-        csvwriter = csv.writer(csvfile)
-
-        csvwriter.writerow(
-            [
-                "sec",
-                # "frame id",
-                # "tracking id main",
-                # "tracking id class wise",
-                "centroid x",
-                "centroid y",
-                "localized centroid x",
-                "localized centroid y",
-                "category",
-                "speed",
-                "acceleration",
-                "distance covered",
-                "average speed",
-                "average acceleration",
-                "total distance",
-                "CO(g/mi)",
-                "HC(g/mi)",
-                "NOx(g/mi)",
-                "PM2.5_Ele(g/mi)",
-                "PM2.5_Org(g/mi)",
-                "Energy(KJ/mi)",
-                "CO2(g/mi)",
-                "Fuel(g/mi)",
-                "TD(mi)",
-
-            ]
-        )
-
-        csvwriter.writerows(factor_list)
 
     out_video.release()
 

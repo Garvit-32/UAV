@@ -17,14 +17,14 @@ from sort.sort import *
 from deep_sort_pytorch.utils.parser import get_config
 from deep_sort_pytorch.deep_sort import DeepSort
 import matplotlib
-
+import ast
 
 import warnings
 warnings.filterwarnings('ignore')
 
 matplotlib.use("TkAgg")
 
-global fps
+
 colors = {0: (0, 0, 255), 1: (0, 255, 0), 2: (255, 0, 0), 3: (255, 255, 0)}
 decoder = {0: "car", 1: "truck", 2: "bus", 3: "heavy_truck"}
 palette = (2 ** 11 - 1, 2 ** 15 - 1, 2 ** 20 - 1)
@@ -245,8 +245,10 @@ class count_object(object):
     def get_average_speed(self, centroids, total_time):
         distance = 0
         for c1, c2 in zip(centroids[:-1], centroids[1:]):
-            c1_geo = localize(c1, image_shape=self.image_size)
-            c2_geo = localize(c2, image_shape=self.image_size)
+            c1_geo = localize(c1, origin_coords, pixel_delta,
+                              image_shape=self.image_size)
+            c2_geo = localize(c2, origin_coords, pixel_delta,
+                              image_shape=self.image_size)
             distance += self.distance(c1_geo, c2_geo)
         return distance / total_time
 
@@ -256,8 +258,10 @@ class count_object(object):
         centroid2,
         time,
     ):
-        centroid1_geo = localize(centroid1, image_shape=self.image_size)
-        centroid2_geo = localize(centroid2, image_shape=self.image_size)
+        centroid1_geo = localize(
+            centroid1, origin_coords, pixel_delta, image_shape=self.image_size)
+        centroid2_geo = localize(
+            centroid2, origin_coords, pixel_delta, image_shape=self.image_size)
 
         dist = self.distance(centroid1_geo, centroid2_geo)
         return dist / time
@@ -267,8 +271,10 @@ class count_object(object):
         centroid1,
         centroid2,
     ):
-        centroid1_geo = localize(centroid1, image_shape=self.image_size)
-        centroid2_geo = localize(centroid2, image_shape=self.image_size)
+        centroid1_geo = localize(
+            centroid1, origin_coords, pixel_delta, image_shape=self.image_size)
+        centroid2_geo = localize(
+            centroid2, origin_coords, pixel_delta, image_shape=self.image_size)
 
         dist = self.distance(centroid1_geo, centroid2_geo)
         return dist
@@ -344,7 +350,8 @@ def write_tracking_csv(counted_objects, decoder, shape):
         for centroid, frame_id, speed, acceleration, distance in zip(
             centroids, frame_indexes, speeds, acceleration, distance_covered
         ):
-            localized_centroid = localize(centroid, image_shape=shape)
+            localized_centroid = localize(
+                centroid, origin_coords, pixel_delta, image_shape=shape)
             csv_file_list.append(
                 [
                     frame_id,
@@ -378,7 +385,7 @@ def localize(
     )
 
 
-def write_csv_tracking(args, csv_file_list_full1, flag=1):
+def write_csv_tracking(args, csv_file_list_full1, init=False):
     with open(
         'Output/' +
             args.path_to_video.split(
@@ -389,7 +396,7 @@ def write_csv_tracking(args, csv_file_list_full1, flag=1):
         csvwriter = csv.writer(csvfile)
 
         # writing the fields
-        if flag == 0:
+        if init:
             csvwriter.writerow(
                 ["frame id", "tracking id", "class", "x1", "y1", "x2", "y2"])
 
@@ -412,16 +419,24 @@ def main():
                     help="path to Video File", )
     ap.add_argument("--debug", action="store_false",
                     help="Argument to debug the code",)
-    ap.add_argument("--corner_percent", action="store_false",
-                    default=10, type=int)
+    ap.add_argument("--corner_percent", default=10, type=int)
+    ap.add_argument("-o", "--origin_coords",
+                    default="37.47646052806184, 126.89894687996158", type=str)
+    ap.add_argument("-pd", "--pixel_delta",
+                    default="-2.00e-06, -2.00e-06", type=str)
 
     args = ap.parse_args()
+
+    global fps
+    global origin_coords
+    global pixel_delta
+    origin_coords = ast.literal_eval(args.origin_coords)
+    pixel_delta = ast.literal_eval(args.pixel_delta)
 
     yolo = attempt_load("weights/best.pt", map_location="cuda").eval().cuda()
 
     remove(args.path_to_video.split("/")[-1][:-4])
 
-    flag = 0
     count = 0
     current_video = cv2.VideoCapture(args.path_to_video)
     width = current_video.get(cv2.CAP_PROP_FRAME_WIDTH)
@@ -438,37 +453,32 @@ def main():
         fps,
         shape,  # change it to width,height if there is no cropping operation performed on image
     )
-    csv_file_list_full = []
-    csv_file_list_full1 = []
 
-    write_csv_tracking(args, [], 0)
-    # flush_count = 0
-    flush_count_thresh = 50
+    trackers_list = []
+    # flush_count_thresh = 50
+
+    write_csv_tracking(args, [], init=True)
+
+    cfg = get_config()
+    cfg.merge_from_file(
+        "Code/deep_sort_pytorch/configs/deep_sort.yaml")
+    deepsort = DeepSort(
+        cfg.DEEPSORT.REID_CKPT,
+        max_dist=cfg.DEEPSORT.MAX_DIST,
+        min_confidence=cfg.DEEPSORT.MIN_CONFIDENCE,
+        nms_max_overlap=cfg.DEEPSORT.NMS_MAX_OVERLAP,
+        max_iou_distance=cfg.DEEPSORT.MAX_IOU_DISTANCE,
+        max_age=cfg.DEEPSORT.MAX_AGE,
+        n_init=cfg.DEEPSORT.N_INIT,
+        nn_budget=cfg.DEEPSORT.NN_BUDGET,
+        num_classes=cfg.DEEPSORT.N_classes,
+        use_cuda=True,
+    )
+    object_counter = count_object(
+        cfg.DEEPSORT.MAX_AGE, cfg.DEEPSORT.N_classes, corner_percent, shape[::-1]
+    )
+
     for idx, frame in tqdm(enumerate(frame_extract(args.path_to_video)), total=length):
-        if flag == 0:
-            # current_counted_object_old = {}
-            # H, W, _ = frame.shape  # (720,1280)
-            main_list = []
-            trackers_list = []
-            cfg = get_config()
-            cfg.merge_from_file(
-                "Code/deep_sort_pytorch/configs/deep_sort.yaml")
-            deepsort = DeepSort(
-                cfg.DEEPSORT.REID_CKPT,
-                max_dist=cfg.DEEPSORT.MAX_DIST,
-                min_confidence=cfg.DEEPSORT.MIN_CONFIDENCE,
-                nms_max_overlap=cfg.DEEPSORT.NMS_MAX_OVERLAP,
-                max_iou_distance=cfg.DEEPSORT.MAX_IOU_DISTANCE,
-                max_age=cfg.DEEPSORT.MAX_AGE,
-                n_init=cfg.DEEPSORT.N_INIT,
-                nn_budget=cfg.DEEPSORT.NN_BUDGET,
-                num_classes=cfg.DEEPSORT.N_classes,
-                use_cuda=True,
-            )
-            object_counter = count_object(
-                cfg.DEEPSORT.MAX_AGE, cfg.DEEPSORT.N_classes, corner_percent, shape[::-1]
-            )
-            flag = 1
 
         bboxes, count = detect_object_yolov5(yolo, frame[:, :, ::-1], count)
 
@@ -498,14 +508,14 @@ def main():
             )
 
             if len(current_counted_object) > 0:
-                # csv_file_list_full += write_tracking_csv(
-                #     current_counted_object, decoder=decoder
-                # )
+                write_tracking_csv(current_counted_object,
+                                   decoder=decoder, shape=shape[::-1])
 
-                if (idx+1) % 50 == 0:
-                    main_list = []
-                main_list += write_tracking_csv(
-                    current_counted_object, decoder=decoder, shape=shape[::-1])
+                # if flush_count > flush_count_thresh:
+                #     current_counted_object_old = current_counted_object
+                # else:
+                #     flush_count = 0
+                #     current_counted_object_old.update(current_counted_object)
 
         else:
             deepsort.increment_ages()
@@ -555,11 +565,12 @@ def main():
                 (0, 0, 0),
                 2,
             )
+
             # line_counted_objects = "Current counted_object: "
-            # # for k, v in current_counted_object_old.items():
-            # #     line_counted_objects += "{} {} ".format(
-            # #         decoder[v["class"]], v["updated_id"]
-            # #     )
+            # for k, v in current_counted_object_old.items():
+            #     line_counted_objects += "{} {} ".format(
+            #         decoder[v["class"]], v["updated_id"]
+            #     )
 
             cv2.putText(
                 frame,

@@ -8,8 +8,8 @@ if __name__ == "__main__":
     # convert to yolo
     # write new txt file
 
-    fcos_txt_path = "/media/sanchit/Workspace/Projects/UAV_traffic_pollution_estimation/txt_files/training_txt_final.txt"
-    output_folder = "/media/sanchit/current_working_datasets/UAV/yolov5_images3/train"
+    fcos_txt_path = "UAV_traffic_pollution_estimation/txt_files/training_txt_final.txt"
+    output_folder = "UAV/yolov5_images3/train"
 
     os.makedirs(output_folder, exist_ok=True)
     os.makedirs(os.path.join(output_folder, "images"), exist_ok=True)
@@ -29,7 +29,8 @@ if __name__ == "__main__":
                 "images",
                 str(idx1)
                 + "."
-                + i.split(" ")[0].split("/")[-1].replace("\n", "").split(".")[1],
+                + i.split(" ")[0].split("/")[-1].replace("\n",
+                                                         "").split(".")[1],
             ),
         )
 

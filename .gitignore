@@ -1,16 +1,12 @@
 Video/*
 *__pycache__*
 *__init__.py
-debug.py
-gaussian_plume.py
-gaussian_plume_model.py
 plot_gauss.py
 Tracking_evaluation_images/*
 point/*
 Plot_gauss/*
 Plot/*
 Output/*
-Input/*
 debug/*
 Documentation/*
 weights/*
@@ -18,3 +14,5 @@ final_debug/*
 Video/*
 PlotOutput/*
 .vscode/*
+commands.txt
+Input/Tracking_evaluation_images

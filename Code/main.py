@@ -1,4 +1,3 @@
-
 import os
 import cv2
 import gc
@@ -28,6 +27,7 @@ matplotlib.use("TkAgg")
 colors = {0: (0, 0, 255), 1: (0, 255, 0), 2: (255, 0, 0), 3: (255, 255, 0)}
 decoder = {0: "car", 1: "truck", 2: "bus", 3: "heavy_truck"}
 palette = (2 ** 11 - 1, 2 ** 15 - 1, 2 ** 20 - 1)
+os.makedirs('./Output', exist_ok=True)
 
 
 def detect_object_yolov5(model, image, count):

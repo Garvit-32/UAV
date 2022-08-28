@@ -2,3 +2,8 @@ filterpy
 seaborn 
 pandas
 easydict
+torch
+torchvision 
+numpy
+opencv-python
+tqdm

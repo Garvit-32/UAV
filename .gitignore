@@ -15,4 +15,3 @@ Video/*
 PlotOutput/*
 .vscode/*
 commands.txt
-!Input/Tracking_evaluation_images/yolo+id

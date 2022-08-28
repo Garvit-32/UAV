@@ -404,6 +404,35 @@ def write_csv_tracking(args, csv_file_list_full1, init=False):
         else:
             csvwriter.writerows(csv_file_list_full1)
 
+def write_physics_csv(args, factor_list = [], init = False):
+    with open('Output/' + args.path_to_video.split("/")[-1][:-4] + "_phyics_factor_per_frame" + ".csv", "a") as csvfile:
+        # creating a csv writer object
+        csvwriter = csv.writer(csvfile)
+
+        # writing the fields
+        if init:
+            csvwriter.writerow(
+                [
+                    "frame id",
+                    "tracking id main",
+                    "tracking id class wise",
+                    "centroid x",
+                    "centroid y",
+                    "localized centroid x",
+                    "localized centroid y",
+                    "category",
+                    "speed",
+                    "acceleration",
+                    "distance covered",
+                    "average speed",
+                    "average acceleration",
+                    "total distance covered",
+                ]
+            )
+        else:
+            # writing the data rows
+            csvwriter.writerows(factor_list)
+
 
 def remove(video_name):
     if os.path.exists(os.path.join("Output", video_name + "_deep_sort_tracking.csv")):
@@ -421,7 +450,7 @@ def main():
                     help="Argument to debug the code",)
     ap.add_argument("--corner_percent", default=10, type=int)
     ap.add_argument("-o", "--origin_coords",
-                    default="37.47646052806184, 126.89894687996158", type=str)
+                    default="37.47646052806184, 126.89894687996158", type=str, help = 'latitude and longitude coordinate of the center of the frame')
     ap.add_argument("-pd", "--pixel_delta",
                     default="-2.00e-06, -2.00e-06", type=str)
 
@@ -432,6 +461,7 @@ def main():
     global pixel_delta
     origin_coords = ast.literal_eval(args.origin_coords)
     pixel_delta = ast.literal_eval(args.pixel_delta)
+    print(pixel_delta)
 
     yolo = attempt_load("weights/best.pt", map_location="cuda").eval().cuda()
 
@@ -455,9 +485,11 @@ def main():
     )
 
     trackers_list = []
+    csv_file_list_full = []
     # flush_count_thresh = 50
 
     write_csv_tracking(args, [], init=True)
+    write_physics_csv(args, [], init=True)
 
     cfg = get_config()
     cfg.merge_from_file(
@@ -508,9 +540,13 @@ def main():
             )
 
             if len(current_counted_object) > 0:
-                write_tracking_csv(current_counted_object,
+                csv_file_list_full += write_tracking_csv(current_counted_object,
                                    decoder=decoder, shape=shape[::-1])
 
+                if (idx+1) % 50 == 0:
+                    write_physics_csv(args, csv_file_list_full)
+                    csv_file_list_full = []
+                    
                 # if flush_count > flush_count_thresh:
                 #     current_counted_object_old = current_counted_object
                 # else:

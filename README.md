@@ -46,7 +46,40 @@ This project aims to count every vehicle (bus, car, truck) detected in the input
     Example  
     ```  
     python Code/tracking_eval/tracking_eval.py -p Input/yolo_id -v DJI_0004_gt
-    ```    
+    ```  
+
+    Tracking result for the given video are: 
+    <table>
+    <tr>
+        <td>MOTA</td>
+        <td>0.7994</td>
+    </tr>
+    <tr>
+        <td>MOTP</td>
+        <td>0.7660</td>
+    </tr>
+    <tr>
+        <td>Ground Truths</td>
+        <td>3884</td>
+    </tr>
+    <tr>
+        <td>False Positives</td>
+        <td>757</td>
+    </tr>
+    <tr>
+        <td>Misses</td>
+        <td>10</td>
+    </tr>
+    <tr>
+        <td>Mismatches</td>
+        <td>12</td>
+    </tr>
+    <tr>
+        <td>Correspondences</td>
+        <td>3874</td>
+    </tr>
+    </table>
+
 
 ## References
 1. https://github.com/ultralytics/yolov5
